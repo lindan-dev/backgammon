@@ -312,58 +312,6 @@
     box-shadow: 0 8px 30px rgba(0,0,0,0.5);
   }
   ::selection{ background: var(--accent); color:#fff; }
-
-  /* Default: grid wrapper just stacks its three children like before */
-  .landscape-grid{ display:block; }
-  .controls-panel{ display:block; }
-
-  /* Compact side-by-side layout for phones in landscape (short viewport) */
-  @media (orientation: landscape) and (max-height: 500px){
-    .wrap{
-      max-width: 100%;
-      padding: 6px calc(10px + env(safe-area-inset-right)) 10px calc(10px + env(safe-area-inset-left));
-    }
-    header{ margin-bottom: 6px; }
-    h1{ font-size: 1rem; }
-    .card{ padding: 8px 10px; margin-bottom: 0; }
-    .challenge-line{ margin-top: 4px; font-size: 0.75rem; }
-    .score-num{ font-size: 1.25rem; }
-
-    .landscape-grid{
-      display:grid;
-      grid-template-columns: minmax(0, 1fr) 200px;
-      grid-template-rows: auto 1fr;
-      grid-template-areas:
-        "board score"
-        "board controls";
-      gap: 8px;
-      align-items: start;
-    }
-    .board-scroll{ grid-area: board; }
-    .score-panel{ grid-area: score; }
-    .controls-panel{
-      grid-area: controls;
-      display:flex;
-      flex-direction:column;
-      gap: 4px;
-    }
-
-    .board-outer{ min-width: 480px; padding: 6px; }
-    .point{ min-height: 78px; }
-    .checker{ width: 17px; height:17px; }
-    .bar{ min-height: 156px; }
-
-    .dice-area{ margin: 0; min-height: 34px; gap:6px; }
-    .die{ width: 30px; height:30px; font-size:0.95rem; }
-    .status-line{ margin: 0; font-size: 0.78rem; min-height: 1.1em; }
-    .controls-row{ margin-top: 2px; justify-content:flex-start; }
-    .btn{ padding: 7px 12px; font-size: 0.9rem; }
-    .footer-note{ margin-top: 6px; font-size: 0.65rem; }
-    .winner-banner{ padding: 10px; }
-    .role-choice{ margin-top: 8px; gap:8px; }
-    .role-btn{ padding: 12px 8px; }
-    .settings-card{ max-height: 90vh; overflow-y:auto; }
-  }
 </style>
 </head>
 <body>
@@ -746,7 +694,7 @@
     app.appendChild(header);
 
     // Scoreboard
-    const scoreCard = el("div", {class:"card score-panel"});
+    const scoreCard = el("div", {class:"card"});
     const sb = el("div", {class:"scoreboard"}, [
       el("div", {class:"score-side" + (g.turn==="daniel" && !state.matchOver ? " turn" : "")}, [
         el("div", {class:"score-name daniel", text:"● Daniel"}),
@@ -760,9 +708,9 @@
     ]);
     scoreCard.appendChild(sb);
     scoreCard.appendChild(el("div", {class:"challenge-line", text: "\"" + state.meta.challenge + "\" · best of " + bestOf + " · first to " + winTarget}));
+    app.appendChild(scoreCard);
 
     if (state.matchOver){
-      app.appendChild(scoreCard);
       const banner = el("div", {class:"winner-banner"}, [
         el("h2", {text: PLAYERS[state.matchWinner] + " wins the match! 🎉"}),
         el("p", {text: "\"" + state.meta.challenge + "\" is settled.", style:"margin:0;color:var(--muted);"})
@@ -776,7 +724,6 @@
     }
 
     if (g.gameOver){
-      app.appendChild(scoreCard);
       const banner = el("div", {class:"winner-banner"}, [
         el("h2", {text: PLAYERS[g.gameWinner] + " wins this game!"}),
         el("p", {text: "Score is now Daniel " + state.scores.daniel + " – " + state.scores.lina + " Lina.", style:"margin:0;color:var(--muted);"})
@@ -794,6 +741,7 @@
     const boardCard = el("div", {class:"board-outer"});
     boardCard.appendChild(buildBoardEl(g));
     scrollWrap.appendChild(boardCard);
+    app.appendChild(scrollWrap);
 
     // Dice
     const diceArea = el("div", {class:"dice-area"});
@@ -803,6 +751,7 @@
         diceArea.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
       });
     }
+    app.appendChild(diceArea);
 
     // Status line
     const myTurn = g.turn === role;
@@ -821,7 +770,7 @@
     } else if (myTurn){
       statusText = selected ? "Choose a destination." : "Choose a checker to move.";
     }
-    const statusEl = el("div", {class:"status-line" + (attn ? " attn" : ""), text: statusText});
+    app.appendChild(el("div", {class:"status-line" + (attn ? " attn" : ""), text: statusText}));
 
     // Controls
     const controls = el("div", {class:"controls-row"});
@@ -831,11 +780,7 @@
     if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
       controls.appendChild(el("button", {class:"btn", text:"End turn", onclick: endTurn}));
     }
-
-    const controlsPanel = el("div", {class:"controls-panel"}, [diceArea, statusEl, controls]);
-
-    const layout = el("div", {class:"landscape-grid"}, [scoreCard, scrollWrap, controlsPanel]);
-    app.appendChild(layout);
+    app.appendChild(controls);
 
     renderFooter();
   }
