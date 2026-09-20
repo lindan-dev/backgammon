@@ -9,7 +9,7 @@
   :root{
     --bg:#ffffff;
     --panel:#f7f7f7;
-    --wood-dark:#111111;
+    --wood-dark:#595959;
     --wood-light:#bfbfbf;
     --point-a:#e9e9e9;
     --point-b:#bdbdbd;
@@ -31,7 +31,7 @@
     :root:not([data-theme="light"]){
       --bg:#0d0d0d;
       --panel:#181818;
-      --wood-dark:#000000;
+      --wood-dark:#666666;
       --wood-light:#3a3a3a;
       --point-a:#2a2a2a;
       --point-b:#3f3f3f;
@@ -46,7 +46,7 @@
   :root[data-theme="dark"]{
     --bg:#0d0d0d;
     --panel:#181818;
-    --wood-dark:#000000;
+    --wood-dark:#666666;
     --wood-light:#3a3a3a;
     --point-a:#2a2a2a;
     --point-b:#3f3f3f;
@@ -472,18 +472,11 @@
   }
 
   // returns destination point number, or "off", or null if illegal
-  function legalDestForDie(g, player, source, die){
+  // Where a checker sitting at point p (real or hypothetical, mid-combo)
+  // would land with the given die — does NOT check that the player
+  // actually owns a checker at p right now.
+  function destFromPoint(g, player, p, die){
     const board = g.board;
-    if (source === "bar"){
-      if (g.bar[player] <= 0) return null;
-      const dest = player === "daniel" ? (25 - die) : die;
-      return canLand(board, player, dest) ? dest : null;
-    }
-    const p = source;
-    const owner = pointOwnerCount(board, p);
-    if (owner.owner !== player || owner.count <= 0) return null;
-    if (g.bar[player] > 0) return null; // must enter from bar first
-
     const dest = player === "daniel" ? (p - die) : (p + die);
     const overshoot = player === "daniel" ? dest < 1 : dest > 24;
 
@@ -508,6 +501,21 @@
     return null;
   }
 
+  function legalDestForDie(g, player, source, die){
+    const board = g.board;
+    if (source === "bar"){
+      if (g.bar[player] <= 0) return null;
+      const dest = player === "daniel" ? (25 - die) : die;
+      return canLand(board, player, dest) ? dest : null;
+    }
+    const p = source;
+    const owner = pointOwnerCount(board, p);
+    if (owner.owner !== player || owner.count <= 0) return null;
+    if (g.bar[player] > 0) return null; // must enter from bar first
+
+    return destFromPoint(g, player, p, die);
+  }
+
   function anyLegalMove(g, player){
     const dice = uniqueVals(g.movesLeft);
     if (g.bar[player] > 0){
@@ -518,11 +526,35 @@
       const owner = pointOwnerCount(g.board, p);
       if (owner.owner !== player) continue;
       for (const d of dice){ if (legalDestForDie(g, player, p, d)) return true; }
+      if (Object.keys(combinedDestsForSource(g, player, p)).length > 0) return true;
     }
     return false;
   }
 
   function uniqueVals(arr){ return Array.from(new Set(arr)); }
+
+  // For a checker at a normal board point (not the bar), find destinations
+  // reachable by using two of the remaining dice together as one move —
+  // only offered when that spot isn't already reachable with a single die.
+  function combinedDestsForSource(g, player, source){
+    const counts = {};
+    g.movesLeft.forEach(d => { counts[d] = (counts[d]||0) + 1; });
+    const values = Object.keys(counts).map(Number);
+    const results = {}; // key (point number or "off") -> {dieA, dieB, mid}
+    for (const dieA of values){
+      const mid = legalDestForDie(g, player, source, dieA);
+      if (mid === null || mid === "off") continue; // no valid first leg
+      for (const dieB of values){
+        const needed = (dieB === dieA) ? 2 : 1;
+        if (counts[dieB] < needed) continue;
+        const finalDest = destFromPoint(g, player, mid, dieB);
+        if (finalDest === null) continue;
+        const key = finalDest === "off" ? "off" : finalDest;
+        if (!(key in results)) results[key] = { dieA, dieB, mid };
+      }
+    }
+    return results;
+  }
 
   function applyMove(g, player, source, die, dest){
     const board = g.board;
@@ -776,6 +808,12 @@
         const dest = legalDestForDie(g, role, src, d);
         if (dest !== null) selectableDestinations[dest === "off" ? "off" : dest] = d;
       });
+      if (selected.type !== "bar"){
+        const combos = combinedDestsForSource(g, role, selected.idx);
+        for (const key in combos){
+          if (!(key in selectableDestinations)) selectableDestinations[key] = { combo: combos[key] };
+        }
+      }
     }
     let selectableSources = new Set();
     if (canAct && !selected){
@@ -785,7 +823,10 @@
         for (let p = 1; p <= 24; p++){
           const owner = pointOwnerCount(g.board, p);
           if (owner.owner !== role) continue;
-          for (const d of dice){ if (legalDestForDie(g, role, p, d)){ selectableSources.add(p); break; } }
+          let ok = false;
+          for (const d of dice){ if (legalDestForDie(g, role, p, d)){ ok = true; break; } }
+          if (!ok && Object.keys(combinedDestsForSource(g, role, p)).length > 0) ok = true;
+          if (ok) selectableSources.add(p);
         }
       }
     }
@@ -931,11 +972,17 @@
     await saveGame(s, g);
   }
 
-  async function doMove(source, die, dest){
+  async function doMove(source, dieOrCombo, dest){
     const s = cloneState(state);
     const g = s.game;
     if (g.turn !== role) return;
-    applyMove(g, role, source, die, dest);
+    if (dieOrCombo && typeof dieOrCombo === "object" && dieOrCombo.combo){
+      const { dieA, dieB, mid } = dieOrCombo.combo;
+      applyMove(g, role, source, dieA, mid);
+      applyMove(g, role, mid, dieB, dest);
+    } else {
+      applyMove(g, role, source, dieOrCombo, dest);
+    }
     selected = null;
     await saveGame(s, g);
   }
