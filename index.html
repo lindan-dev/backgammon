@@ -69,7 +69,7 @@
   .wrap{
     max-width: 920px;
     margin: 0 auto;
-    padding: 16px 14px 40px;
+    padding: 10px 8px 30px;
   }
   header{
     display:flex; align-items:center; justify-content:space-between;
@@ -174,7 +174,29 @@
     box-shadow: 0 4px 14px var(--shadow);
     width: 100%;
     min-width: 300px;
+    position: relative;
   }
+  .board-dice-overlay{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--wood-light);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 3px 10px var(--shadow);
+  }
+  .board-dice-overlay .dice-row{
+    display:flex; flex-wrap:wrap; justify-content:center;
+    gap: 5px; max-width: 78px;
+  }
+  .board-dice-overlay .die{ width: 32px; height:32px; font-size:0.95rem; }
   .board{
     display:grid;
     grid-template-columns: 0.55fr repeat(6, 1fr) 0.55fr repeat(6, 1fr) 0.55fr;
@@ -742,21 +764,29 @@
     const scrollWrap = el("div", {class:"board-scroll"});
     const boardCard = el("div", {class:"board-outer"});
     boardCard.appendChild(buildBoardEl(g));
+
+    // Dice + roll/end-turn, shown as a floating chip on the board itself (at the bar)
+    const myTurn = g.turn === role;
+    const diceOverlay = el("div", {class:"board-dice-overlay"});
+    if (g.diceRolled){
+      const diceRow = el("div", {class:"dice-row"});
+      g.dice.forEach((d, i) => {
+        const used = countUsed(g, d, i);
+        diceRow.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
+      });
+      diceOverlay.appendChild(diceRow);
+    }
+    if (myTurn && !g.diceRolled){
+      diceOverlay.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollDice}));
+    } else if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
+      diceOverlay.appendChild(el("button", {class:"btn small secondary", text:"End turn", onclick: endTurn}));
+    }
+    if (diceOverlay.children.length > 0) boardCard.appendChild(diceOverlay);
+
     scrollWrap.appendChild(boardCard);
     app.appendChild(scrollWrap);
 
-    // Dice
-    const diceArea = el("div", {class:"dice-area"});
-    if (g.diceRolled){
-      g.dice.forEach((d, i) => {
-        const used = countUsed(g, d, i);
-        diceArea.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
-      });
-    }
-    app.appendChild(diceArea);
-
     // Status line
-    const myTurn = g.turn === role;
     let statusText = "";
     let attn = false;
     if (!g.diceRolled){
@@ -773,16 +803,6 @@
       statusText = selected ? "Choose a destination." : "Choose a checker to move.";
     }
     app.appendChild(el("div", {class:"status-line" + (attn ? " attn" : ""), text: statusText}));
-
-    // Controls
-    const controls = el("div", {class:"controls-row"});
-    if (myTurn && !g.diceRolled){
-      controls.appendChild(el("button", {class:"btn", text:"Roll dice", onclick: rollDice}));
-    }
-    if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
-      controls.appendChild(el("button", {class:"btn", text:"End turn", onclick: endTurn}));
-    }
-    app.appendChild(controls);
 
     app.appendChild(scoreCard);
     renderFooter();
