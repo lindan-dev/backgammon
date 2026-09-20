@@ -162,11 +162,45 @@
   .vs{ font-weight:700; color:var(--muted); font-size:1.1rem; }
 
   /* Board */
+  .board-row{
+    display:flex;
+    align-items:stretch;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
   .board-scroll{
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     border-radius: 14px;
+    flex: 1 1 auto;
+    min-width: 0;
   }
+  .side-panel{
+    flex: 0 0 82px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: 6px;
+    padding: 8px 4px;
+    border-radius: 12px;
+    text-align:center;
+  }
+  .side-panel.active{
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: rgba(128,128,128,0.08);
+  }
+  .side-name{ font-weight:700; font-size:0.8rem; }
+  .side-name.daniel{ color: var(--daniel); }
+  .side-name.lina{ color: var(--lina); }
+  .side-dice{
+    display:flex; flex-wrap:wrap; justify-content:center;
+    gap: 4px; min-height: 32px;
+  }
+  .side-dice .die{ width: 30px; height:30px; font-size:0.9rem; }
+  .side-hint{ font-size:0.68rem; color: var(--muted); line-height:1.2; }
+  .side-hint.attn{ color: var(--accent); font-weight:700; }
+  .btn.small{ padding: 6px 10px; font-size:0.82rem; box-shadow:none; }
   .board-outer{
     background: var(--wood-dark);
     border-radius: 14px;
@@ -693,7 +727,7 @@
     ]);
     app.appendChild(header);
 
-    // Scoreboard
+    // Scoreboard (built now, placed at the bottom of the page)
     const scoreCard = el("div", {class:"card"});
     const sb = el("div", {class:"scoreboard"}, [
       el("div", {class:"score-side" + (g.turn==="daniel" && !state.matchOver ? " turn" : "")}, [
@@ -708,7 +742,6 @@
     ]);
     scoreCard.appendChild(sb);
     scoreCard.appendChild(el("div", {class:"challenge-line", text: "\"" + state.meta.challenge + "\" · best of " + bestOf + " · first to " + winTarget}));
-    app.appendChild(scoreCard);
 
     if (state.matchOver){
       const banner = el("div", {class:"winner-banner"}, [
@@ -719,6 +752,7 @@
       app.appendChild(el("div", {class:"controls-row"}, [
         el("button", {class:"btn", text:"Start a new match", onclick: openSettings})
       ]));
+      app.appendChild(scoreCard);
       renderFooter();
       return;
     }
@@ -732,6 +766,7 @@
       app.appendChild(el("div", {class:"controls-row"}, [
         el("button", {class:"btn", text:"Start next game", onclick: startNextGame})
       ]));
+      app.appendChild(scoreCard);
       renderFooter();
       return;
     }
@@ -741,48 +776,61 @@
     const boardCard = el("div", {class:"board-outer"});
     boardCard.appendChild(buildBoardEl(g));
     scrollWrap.appendChild(boardCard);
-    app.appendChild(scrollWrap);
 
-    // Dice
-    const diceArea = el("div", {class:"dice-area"});
-    if (g.diceRolled){
+    const boardRow = el("div", {class:"board-row"}, [
+      buildSidePanel(g, "lina"),
+      scrollWrap,
+      buildSidePanel(g, "daniel")
+    ]);
+    app.appendChild(boardRow);
+
+    app.appendChild(scoreCard);
+    renderFooter();
+  }
+
+  // A dice + roll/end-turn panel for one player, shown beside the board.
+  function buildSidePanel(g, player){
+    const isTurn = g.turn === player;
+    const isMe = role === player;
+    const panel = el("div", {class:"side-panel" + (isTurn ? " active" : "")});
+    panel.appendChild(el("div", {class:"side-name " + player, text: (player === "daniel" ? "● Daniel" : "○ Lina")}));
+
+    const diceWrap = el("div", {class:"side-dice"});
+    if (isTurn && g.diceRolled){
       g.dice.forEach((d, i) => {
         const used = countUsed(g, d, i);
-        diceArea.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
+        diceWrap.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
       });
     }
-    app.appendChild(diceArea);
+    panel.appendChild(diceWrap);
 
-    // Status line
-    const myTurn = g.turn === role;
-    let statusText = "";
+    let hint = "";
     let attn = false;
-    if (!g.diceRolled){
-      statusText = myTurn ? "Your roll." : (PLAYERS[g.turn] + " is rolling…");
-    } else if (g.movesLeft.length === 0){
-      statusText = myTurn ? "No moves left — end your turn." : (PLAYERS[g.turn] + " is finishing up…");
-    } else if (!anyLegalMove(g, g.turn)){
-      statusText = myTurn ? "No legal moves available — end your turn." : (PLAYERS[g.turn] + " has no legal moves…");
-      attn = myTurn;
-    } else if (g.bar[g.turn] > 0){
-      statusText = myTurn ? "You have a checker on the bar — enter it first." : "";
-      attn = myTurn;
-    } else if (myTurn){
-      statusText = selected ? "Choose a destination." : "Choose a checker to move.";
+    if (isTurn){
+      if (!g.diceRolled){
+        hint = isMe ? "Your roll" : "Rolling…";
+      } else if (g.movesLeft.length === 0){
+        hint = isMe ? "End your turn" : "Finishing…";
+      } else if (!anyLegalMove(g, player)){
+        hint = isMe ? "No legal moves" : "No moves…";
+        attn = isMe;
+      } else if (g.bar[player] > 0){
+        hint = isMe ? "Enter from the bar" : "";
+        attn = isMe;
+      } else if (isMe){
+        hint = selected ? "Pick a spot" : "Pick a checker";
+      }
     }
-    app.appendChild(el("div", {class:"status-line" + (attn ? " attn" : ""), text: statusText}));
+    if (hint) panel.appendChild(el("div", {class:"side-hint" + (attn ? " attn" : ""), text:hint}));
 
-    // Controls
-    const controls = el("div", {class:"controls-row"});
-    if (myTurn && !g.diceRolled){
-      controls.appendChild(el("button", {class:"btn", text:"Roll dice", onclick: rollDice}));
+    if (isMe && isTurn){
+      if (!g.diceRolled){
+        panel.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollDice}));
+      } else if (g.movesLeft.length === 0 || !anyLegalMove(g, player)){
+        panel.appendChild(el("button", {class:"btn small secondary", text:"End turn", onclick: endTurn}));
+      }
     }
-    if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
-      controls.appendChild(el("button", {class:"btn", text:"End turn", onclick: endTurn}));
-    }
-    app.appendChild(controls);
-
-    renderFooter();
+    return panel;
   }
 
   function countUsed(g, dieVal, indexInDiceArray){
