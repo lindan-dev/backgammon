@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backgammon — Daniel &amp; Lina</title>
+<style>
+  :root{
+    --bg:#f4ede3;
+    --panel:#fffaf3;
+    --wood-dark:#8a5a34;
+    --wood-light:#c99a6b;
+    --point-a:#d9b48f;
+    --point-b:#a9713f;
+    --line:#5c3a20;
+    --text:#2b1d12;
+    --muted:#7a6a58;
+    --accent:#b5482b;
+    --accent2:#2f6b4f;
+    --daniel:#2f6b4f;
+    --lina:#b5482b;
+    --daniel-checker:#2f6b4f;
+    --lina-checker:#b5482b;
+    --shadow: rgba(0,0,0,0.25);
+    box-sizing:border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1c1712;
+      --panel:#241d16;
+      --wood-dark:#3a2416;
+      --wood-light:#5c3a20;
+      --point-a:#4a3220;
+      --point-b:#6b4526;
+      --line:#0f0a06;
+      --text:#f1e7da;
+      --muted:#b7a48f;
+      --shadow: rgba(0,0,0,0.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1c1712;
+    --panel:#241d16;
+    --wood-dark:#3a2416;
+    --wood-light:#5c3a20;
+    --point-a:#4a3220;
+    --point-b:#6b4526;
+    --line:#0f0a06;
+    --text:#f1e7da;
+    --muted:#b7a48f;
+    --shadow: rgba(0,0,0,0.6);
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height:100%;
+  }
+  * { box-sizing: border-box; }
+  .wrap{
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 16px 14px 40px;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 8px; flex-wrap:wrap;
+    margin-bottom: 10px;
+  }
+  h1{
+    font-size: 1.15rem;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--panel);
+    border: 1px solid var(--wood-light);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    font: inherit; font-weight:600;
+    padding: 9px 16px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff8f2;
+    box-shadow: 0 2px 6px var(--shadow);
+    transition: transform .08s ease, opacity .15s ease;
+  }
+  .btn:active{ transform: translateY(1px); }
+  .btn.secondary{
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--wood-light);
+    box-shadow:none;
+  }
+  .btn.ghost{
+    background:transparent;
+    color: var(--muted);
+    border: none;
+    box-shadow:none;
+    padding: 6px 8px;
+    font-weight:500;
+    text-decoration: underline;
+  }
+  .btn:disabled{ opacity:.4; cursor:default; }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--wood-light);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 10px var(--shadow);
+  }
+  .center{ text-align:center; }
+  label{ display:block; font-size:0.85rem; color:var(--muted); margin: 10px 0 4px; }
+  input[type=text], input[type=number]{
+    width:100%;
+    font: inherit;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--wood-light);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  /* Scoreboard */
+  .scoreboard{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; flex-wrap:wrap;
+  }
+  .score-side{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    min-width: 88px;
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+  .score-side.turn{ background: rgba(255,255,255,0.08); box-shadow: inset 0 0 0 2px var(--accent); }
+  .score-name{ font-weight:700; font-size:0.95rem; }
+  .score-num{ font-size:1.6rem; font-weight:800; }
+  .score-name.daniel, .dot.daniel{ color: var(--daniel); }
+  .score-name.lina, .dot.lina{ color: var(--lina); }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .challenge-line{
+    text-align:center; font-size:0.85rem; color: var(--muted); margin-top:8px;
+  }
+  .vs{ font-weight:700; color:var(--muted); font-size:1.1rem; }
+
+  /* Board */
+  .board-scroll{
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 14px;
+  }
+  .board-outer{
+    background: var(--wood-dark);
+    border-radius: 14px;
+    padding: 10px;
+    box-shadow: 0 4px 14px var(--shadow);
+    min-width: 620px;
+  }
+  .board{
+    display:grid;
+    grid-template-columns: 34px repeat(6, 1fr) 34px repeat(6, 1fr) 34px;
+    gap: 2px;
+    background: var(--wood-dark);
+    border-radius: 8px;
+    overflow:hidden;
+  }
+  .quad{
+    display:grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    grid-column: span 6;
+  }
+  .off-col{
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    background: var(--wood-light);
+    border-radius: 4px;
+    padding: 4px 2px;
+    font-size: 0.65rem;
+    color: var(--text);
+    min-height: 100%;
+  }
+  .off-col .lbl{ writing-mode: vertical-rl; text-orientation: mixed; font-weight:700; opacity:.8;}
+  .off-count{ font-weight:800; font-size:0.95rem; }
+
+  .point{
+    position:relative;
+    background: var(--point-a);
+    min-height: 132px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 3px 0;
+    cursor:pointer;
+    overflow:visible;
+  }
+  .point.b{ background: var(--point-b); }
+  .point.top{ justify-content:flex-start; }
+  .point.bottom{ justify-content:flex-end; }
+  .point .idx{
+    position:absolute; font-size:0.55rem; color: rgba(0,0,0,0.35);
+    top:2px; left:3px;
+  }
+  .point.bottom .idx{ top:auto; bottom:2px; }
+  .point.selectable::after{
+    content:""; position:absolute; inset:2px;
+    border: 2px dashed var(--accent2);
+    border-radius: 4px;
+    pointer-events:none;
+  }
+  .point.selected::after{
+    content:""; position:absolute; inset:2px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    pointer-events:none;
+  }
+  .checker{
+    width: 22px; height:22px; border-radius:50%;
+    margin: 1px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 0.65rem; font-weight:800; color:#fff;
+    flex-shrink:0;
+  }
+  .checker.daniel{ background: var(--daniel-checker); }
+  .checker.lina{ background: var(--lina-checker); }
+
+  .bar{
+    grid-column: span 1;
+    background: var(--wood-dark);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 6px;
+    padding: 4px 0;
+    min-height: 264px;
+  }
+  .bar .bar-stack{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .bar-label{ font-size:0.55rem; color:#e8d9c5; opacity:.7; }
+
+  .rows-wrap{ display:flex; flex-direction:column; gap:2px; }
+
+  .dice-area{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    margin: 10px 0 4px;
+    min-height: 46px;
+  }
+  .die{
+    width: 38px; height:38px; border-radius:8px;
+    background:#fffaf3; color:#2b1d12;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:1.1rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    border: 2px solid var(--wood-dark);
+  }
+  .die.used{ opacity:.3; text-decoration: line-through; }
+
+  .status-line{
+    text-align:center; margin: 6px 0 2px;
+    font-size:0.9rem; color: var(--muted);
+    min-height: 1.3em;
+  }
+  .status-line.attn{ color: var(--accent); font-weight:700; }
+
+  .controls-row{
+    display:flex; justify-content:center; gap:10px; margin-top:10px; flex-wrap:wrap;
+  }
+
+  .role-choice{ display:flex; gap:12px; justify-content:center; margin-top:14px; flex-wrap:wrap; }
+  .role-btn{
+    flex:1; min-width:130px; padding: 18px 10px; border-radius:14px;
+    border: 2px solid var(--wood-light); background: var(--bg);
+    font-weight:800; font-size:1rem; cursor:pointer; color:var(--text);
+  }
+  .role-btn.daniel{ border-color: var(--daniel); color:var(--daniel); }
+  .role-btn.lina{ border-color: var(--lina); color:var(--lina); }
+
+  .winner-banner{
+    text-align:center; padding: 14px; border-radius:12px;
+    background: rgba(181,72,43,0.12);
+    border: 1px solid var(--accent);
+    margin-bottom: 12px;
+  }
+  .winner-banner h2{ margin:0 0 4px; font-size:1.2rem; }
+
+  .footer-note{ text-align:center; font-size:0.72rem; color:var(--muted); margin-top: 18px; }
+
+  .settings-pop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.45);
+    display:flex; align-items:center; justify-content:center;
+    padding: 20px; z-index: 50;
+  }
+  .settings-card{
+    background: var(--panel); border-radius:16px; padding:20px;
+    max-width: 380px; width:100%;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  ::selection{ background: var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="center" style="padding:60px 0;color:var(--muted);">Loading…</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const PLAYERS = { daniel: "Daniel", lina: "Lina" };
+  const OPP = { daniel: "lina", lina: "daniel" };
+  const ROLE_KEY = "bg_role_v1";
+  const DOC_PATH = "matches/current"; // kept for readability; the Supabase shim ignores the path and always uses one fixed row
+
+  // ---- Fill these in with your own Supabase project's values ----
+  // Project Settings -> API in your Supabase dashboard.
+  // The anon/public key is meant to be exposed client-side; access is
+  // controlled by the Row Level Security policies on the table (see README).
+  const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL"; // e.g. "https://xxxxxxxx.supabase.co"
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+  const SUPABASE_TABLE = "bg_matches";
+  const SUPABASE_ROW_ID = "current";
+
+  function deepMerge(target, patch){
+    if (Array.isArray(patch) || patch === null || typeof patch !== "object") return patch;
+    const base = (target && typeof target === "object" && !Array.isArray(target)) ? target : {};
+    const result = Object.assign({}, base);
+    for (const k in patch){
+      const pv = patch[k];
+      const tv = base[k];
+      if (pv !== null && typeof pv === "object" && !Array.isArray(pv) && tv !== null && typeof tv === "object" && !Array.isArray(tv)){
+        result[k] = deepMerge(tv, pv);
+      } else {
+        result[k] = pv;
+      }
+    }
+    return result;
+  }
+
+  // A tiny shim exposing the same doc(path).get/set/update/onSnapshot
+  // shape the rest of this file was written against, backed by a single
+  // Supabase table row instead of Claude's built-in db capability.
+  function makeSupabaseDb(client){
+    function docRef(){
+      return {
+        async get(){
+          const { data, error } = await client.from(SUPABASE_TABLE).select("state").eq("id", SUPABASE_ROW_ID).maybeSingle();
+          if (error) throw error;
+          return { exists: !!data, data: () => (data ? data.state : undefined) };
+        },
+        async set(newState){
+          const { error } = await client.from(SUPABASE_TABLE).upsert({ id: SUPABASE_ROW_ID, state: newState, updated_at: new Date().toISOString() });
+          if (error) throw error;
+        },
+        async update(patch){
+          const { data, error: selErr } = await client.from(SUPABASE_TABLE).select("state").eq("id", SUPABASE_ROW_ID).maybeSingle();
+          if (selErr) throw selErr;
+          if (!data) throw new Error("Match row does not exist yet.");
+          const merged = deepMerge(data.state, patch);
+          const { error } = await client.from(SUPABASE_TABLE).update({ state: merged, updated_at: new Date().toISOString() }).eq("id", SUPABASE_ROW_ID);
+          if (error) throw error;
+        },
+        onSnapshot(next, errCb){
+          this.get().then(next).catch(e => errCb && errCb(e));
+          const channel = client
+            .channel("bg_matches_" + SUPABASE_ROW_ID)
+            .on("postgres_changes", { event: "*", schema: "public", table: SUPABASE_TABLE, filter: "id=eq." + SUPABASE_ROW_ID }, (payload) => {
+              if (payload.eventType === "DELETE"){
+                next({ exists: false, data: () => undefined });
+              } else {
+                const row = payload.new;
+                next({ exists: true, data: () => (row ? row.state : undefined) });
+              }
+            })
+            .subscribe();
+          return () => client.removeChannel(channel);
+        }
+      };
+    }
+    return { doc: () => docRef() };
+  }
+
+  let db = null;
+  let dbAvailable = null; // null=unknown, true/false once resolved
+  let role = localStorage.getItem(ROLE_KEY) || null;
+  let state = undefined; // undefined = not loaded yet, null = doc doesn't exist
+  let selected = null; // selected source: {type:'point', idx} | {type:'bar'}
+  let localError = "";
+
+  const app = document.getElementById("app");
+
+  function freshBoard(){
+    const board = new Array(25).fill(0);
+    // daniel (positive) moves 24 -> 1, home 1-6
+    board[24] = 2; board[13] = 5; board[8] = 3; board[6] = 5;
+    // lina (negative) moves 1 -> 24, home 19-24
+    board[1] = -2; board[12] = -5; board[17] = -3; board[19] = -5;
+    return board;
+  }
+
+  function newGameState(startingTurn){
+    return {
+      board: freshBoard(),
+      bar: { daniel: 0, lina: 0 },
+      off: { daniel: 0, lina: 0 },
+      turn: startingTurn,
+      dice: [],
+      movesLeft: [],
+      diceRolled: false,
+      gameOver: false,
+      gameWinner: null,
+      message: ""
+    };
+  }
+
+  function defaultMatchState(){
+    return {
+      meta: { challenge: "Sunday dinner", bestOf: 11 },
+      scores: { daniel: 0, lina: 0 },
+      game: newGameState(Math.random() < 0.5 ? "daniel" : "lina"),
+      matchOver: false,
+      matchWinner: null,
+      updatedAt: Date.now()
+    };
+  }
+
+  // ---------- Backgammon rules ----------
+
+  function isHome(player, point){
+    return player === "daniel" ? (point >= 1 && point <= 6) : (point >= 19 && point <= 24);
+  }
+
+  function allCheckersHome(player, g){
+    if (g.bar[player] > 0) return false;
+    const board = g.board;
+    for (let p = 1; p <= 24; p++){
+      const val = board[p];
+      if (player === "daniel" && val > 0 && !(p >= 1 && p <= 6)) return false;
+      if (player === "lina" && val < 0 && !(p >= 19 && p <= 24)) return false;
+    }
+    return true;
+  }
+
+  function pointOwnerCount(board, point){
+    const v = board[point];
+    if (v > 0) return { owner: "daniel", count: v };
+    if (v < 0) return { owner: "lina", count: -v };
+    return { owner: null, count: 0 };
+  }
+
+  function canLand(board, player, point){
+    if (point < 1 || point > 24) return false;
+    const { owner, count } = pointOwnerCount(board, point);
+    if (owner === null || owner === player) return true;
+    return count <= 1; // blot, can hit
+  }
+
+  // returns destination point number, or "off", or null if illegal
+  function legalDestForDie(g, player, source, die){
+    const board = g.board;
+    if (source === "bar"){
+      if (g.bar[player] <= 0) return null;
+      const dest = player === "daniel" ? (25 - die) : die;
+      return canLand(board, player, dest) ? dest : null;
+    }
+    const p = source;
+    const owner = pointOwnerCount(board, p);
+    if (owner.owner !== player || owner.count <= 0) return null;
+    if (g.bar[player] > 0) return null; // must enter from bar first
+
+    const dest = player === "daniel" ? (p - die) : (p + die);
+    const overshoot = player === "daniel" ? dest < 1 : dest > 24;
+
+    if (!overshoot) {
+      return canLand(board, player, dest) ? dest : null;
+    }
+    // bearing off
+    if (!allCheckersHome(player, g)) return null;
+    const dist = player === "daniel" ? p : (25 - p); // pips to bear off exactly
+    if (die === dist) return "off";
+    if (die > dist){
+      // only legal if no checkers on higher points (farther from off) than p
+      for (let q = 1; q <= 24; q++){
+        if (q === p) continue;
+        const oc = pointOwnerCount(board, q);
+        if (oc.owner !== player) continue;
+        const qdist = player === "daniel" ? q : (25 - q);
+        if (qdist > dist) return null;
+      }
+      return "off";
+    }
+    return null;
+  }
+
+  function anyLegalMove(g, player){
+    const dice = uniqueVals(g.movesLeft);
+    if (g.bar[player] > 0){
+      for (const d of dice){ if (legalDestForDie(g, player, "bar", d)) return true; }
+      return false;
+    }
+    for (let p = 1; p <= 24; p++){
+      const owner = pointOwnerCount(g.board, p);
+      if (owner.owner !== player) continue;
+      for (const d of dice){ if (legalDestForDie(g, player, p, d)) return true; }
+    }
+    return false;
+  }
+
+  function uniqueVals(arr){ return Array.from(new Set(arr)); }
+
+  function applyMove(g, player, source, die, dest){
+    const board = g.board;
+    if (source === "bar"){ g.bar[player] -= 1; }
+    else { board[source] -= player === "daniel" ? 1 : -1; }
+
+    if (dest === "off"){
+      g.off[player] += 1;
+    } else {
+      const occ = pointOwnerCount(board, dest);
+      if (occ.owner === OPP[player] && occ.count === 1){
+        board[dest] = 0;
+        g.bar[OPP[player]] += 1;
+      }
+      board[dest] += player === "daniel" ? 1 : -1;
+    }
+    // remove one instance of die from movesLeft
+    const idx = g.movesLeft.indexOf(die);
+    if (idx !== -1) g.movesLeft.splice(idx, 1);
+
+    if (g.off[player] === 15){
+      g.gameOver = true;
+      g.gameWinner = player;
+    }
+  }
+
+  // ---------- Rendering ----------
+
+  function el(tag, attrs, children){
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs){
+      if (k === "class") e.className = attrs[k];
+      else if (k === "text") e.textContent = attrs[k];
+      else if (k.startsWith("on") && typeof attrs[k] === "function") e.addEventListener(k.slice(2), attrs[k]);
+      else e.setAttribute(k, attrs[k]);
+    }
+    (children||[]).forEach(c => { if (c) e.appendChild(c); });
+    return e;
+  }
+
+  function render(){
+    app.innerHTML = "";
+
+    if (dbAvailable === false){
+      app.appendChild(el("div", {class:"card center"}, [
+        el("h1", {text:"Almost there"}),
+        el("p", {text: localError || "Couldn't connect to Supabase.", style:"color:var(--accent);"}),
+        el("p", {text:"Open this file, fill in SUPABASE_URL and SUPABASE_ANON_KEY near the top of the <script>, and make sure the bg_matches table exists (see README.md).", style:"color:var(--muted);font-size:0.85rem;"})
+      ]));
+      return;
+    }
+
+    if (!role){
+      renderRoleChoice();
+      return;
+    }
+
+    if (localError){
+      app.appendChild(el("div", {class:"card center", style:"color:var(--accent);font-size:0.85rem;"}, [
+        el("span", {text: "Connection hiccup: " + localError + " Try reopening the page."})
+      ]));
+    }
+
+    if (state === undefined){
+      app.appendChild(el("div", {class:"center", style:"padding:60px 0;color:var(--muted);"}, [
+        el("div", {text:"Loading…"})
+      ]));
+      return;
+    }
+
+    if (state === null){
+      renderSetup();
+      return;
+    }
+
+    renderGame();
+  }
+
+  function renderRoleChoice(){
+    const card = el("div", {class:"card"}, [
+      el("h1", {text:"Backgammon — Daniel & Lina", style:"text-align:center;"}),
+      el("p", {class:"center", text:"Who's playing on this device?", style:"color:var(--muted);"}),
+    ]);
+    const choice = el("div", {class:"role-choice"}, [
+      el("button", {class:"role-btn daniel", text:"I'm Daniel", onclick:()=>{ setRole("daniel"); }}),
+      el("button", {class:"role-btn lina", text:"I'm Lina", onclick:()=>{ setRole("lina"); }}),
+    ]);
+    card.appendChild(choice);
+    app.appendChild(card);
+  }
+
+  function setRole(r){
+    role = r;
+    localStorage.setItem(ROLE_KEY, r);
+    render();
+  }
+
+  function renderSetup(){
+    const card = el("div", {class:"card"});
+    card.appendChild(el("h1", {text:"Set up this week's match", style:"text-align:center;"}));
+    card.appendChild(el("p", {class:"center", text:"Playing as " + PLAYERS[role] + ".", style:"color:var(--muted);"}));
+
+    const challengeInput = el("input", {type:"text", id:"setup-challenge", value:"Sunday dinner"});
+    const bestOfInput = el("input", {type:"number", id:"setup-bestof", value:"11", min:"1", step:"2"});
+
+    card.appendChild(el("label", {text:"This week's challenge / stakes"}));
+    card.appendChild(challengeInput);
+    card.appendChild(el("label", {text:"Best of (games)"}));
+    card.appendChild(bestOfInput);
+
+    card.appendChild(el("div", {class:"controls-row"}, [
+      el("button", {class:"btn", text:"Start match", onclick: async ()=>{
+        const challenge = challengeInput.value.trim() || "This week's match";
+        let bestOf = parseInt(bestOfInput.value, 10);
+        if (!bestOf || bestOf < 1) bestOf = 11;
+        const fresh = defaultMatchState();
+        fresh.meta.challenge = challenge;
+        fresh.meta.bestOf = bestOf;
+        try {
+          await db.doc(DOC_PATH).set(fresh);
+        } catch(e){ /* another client may have created it already; fine */ }
+      }})
+    ]));
+    app.appendChild(card);
+  }
+
+  function renderGame(){
+    const g = state.game;
+    const bestOf = state.meta.bestOf;
+    const winTarget = Math.ceil(bestOf / 2);
+
+    // Header
+    const header = el("header", {}, [
+      el("h1", {text:"🎲 Backgammon"}),
+      el("button", {class:"pill", text:"⚙️ Settings", onclick: openSettings})
+    ]);
+    app.appendChild(header);
+
+    // Scoreboard
+    const scoreCard = el("div", {class:"card"});
+    const sb = el("div", {class:"scoreboard"}, [
+      el("div", {class:"score-side" + (g.turn==="daniel" && !state.matchOver ? " turn" : "")}, [
+        el("div", {class:"score-name daniel", text:"Daniel"}),
+        el("div", {class:"score-num", text:String(state.scores.daniel)})
+      ]),
+      el("div", {class:"vs", text: state.matchOver ? "🏆" : (bestOf + "-game")}),
+      el("div", {class:"score-side" + (g.turn==="lina" && !state.matchOver ? " turn" : "")}, [
+        el("div", {class:"score-name lina", text:"Lina"}),
+        el("div", {class:"score-num", text:String(state.scores.lina)})
+      ]),
+    ]);
+    scoreCard.appendChild(sb);
+    scoreCard.appendChild(el("div", {class:"challenge-line", text: "\"" + state.meta.challenge + "\" · best of " + bestOf + " · first to " + winTarget}));
+    app.appendChild(scoreCard);
+
+    if (state.matchOver){
+      const banner = el("div", {class:"winner-banner"}, [
+        el("h2", {text: PLAYERS[state.matchWinner] + " wins the match! 🎉"}),
+        el("p", {text: "\"" + state.meta.challenge + "\" is settled.", style:"margin:0;color:var(--muted);"})
+      ]);
+      app.appendChild(banner);
+      app.appendChild(el("div", {class:"controls-row"}, [
+        el("button", {class:"btn", text:"Start a new match", onclick: openSettings})
+      ]));
+      renderFooter();
+      return;
+    }
+
+    if (g.gameOver){
+      const banner = el("div", {class:"winner-banner"}, [
+        el("h2", {text: PLAYERS[g.gameWinner] + " wins this game!"}),
+        el("p", {text: "Score is now Daniel " + state.scores.daniel + " – " + state.scores.lina + " Lina.", style:"margin:0;color:var(--muted);"})
+      ]);
+      app.appendChild(banner);
+      app.appendChild(el("div", {class:"controls-row"}, [
+        el("button", {class:"btn", text:"Start next game", onclick: startNextGame})
+      ]));
+      renderFooter();
+      return;
+    }
+
+    // Board
+    const scrollWrap = el("div", {class:"board-scroll"});
+    const boardCard = el("div", {class:"board-outer"});
+    boardCard.appendChild(buildBoardEl(g));
+    scrollWrap.appendChild(boardCard);
+    app.appendChild(scrollWrap);
+
+    // Dice
+    const diceArea = el("div", {class:"dice-area"});
+    if (g.diceRolled){
+      g.dice.forEach((d, i) => {
+        const used = countUsed(g, d, i);
+        diceArea.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
+      });
+    }
+    app.appendChild(diceArea);
+
+    // Status line
+    const myTurn = g.turn === role;
+    let statusText = "";
+    let attn = false;
+    if (!g.diceRolled){
+      statusText = myTurn ? "Your roll." : (PLAYERS[g.turn] + " is rolling…");
+    } else if (g.movesLeft.length === 0){
+      statusText = myTurn ? "No moves left — end your turn." : (PLAYERS[g.turn] + " is finishing up…");
+    } else if (!anyLegalMove(g, g.turn)){
+      statusText = myTurn ? "No legal moves available — end your turn." : (PLAYERS[g.turn] + " has no legal moves…");
+      attn = myTurn;
+    } else if (g.bar[g.turn] > 0){
+      statusText = myTurn ? "You have a checker on the bar — enter it first." : "";
+      attn = myTurn;
+    } else if (myTurn){
+      statusText = selected ? "Choose a destination." : "Choose a checker to move.";
+    }
+    app.appendChild(el("div", {class:"status-line" + (attn ? " attn" : ""), text: statusText}));
+
+    // Controls
+    const controls = el("div", {class:"controls-row"});
+    if (myTurn && !g.diceRolled){
+      controls.appendChild(el("button", {class:"btn", text:"Roll dice", onclick: rollDice}));
+    }
+    if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
+      controls.appendChild(el("button", {class:"btn", text:"End turn", onclick: endTurn}));
+    }
+    app.appendChild(controls);
+
+    renderFooter();
+  }
+
+  function countUsed(g, dieVal, indexInDiceArray){
+    // approximate: a die value is "used" once movesLeft has fewer instances of it than g.dice
+    const totalOfVal = g.dice.filter(x => x === dieVal).length;
+    const remainingOfVal = g.movesLeft.filter(x => x === dieVal).length;
+    const usedCount = totalOfVal - remainingOfVal;
+    // count how many dice entries with this value come before/at this index
+    let occurrenceIdx = 0;
+    for (let i = 0; i <= indexInDiceArray; i++){ if (g.dice[i] === dieVal) occurrenceIdx++; }
+    return occurrenceIdx <= usedCount;
+  }
+
+  function buildBoardEl(g){
+    const myTurn = g.turn === role;
+    const canAct = myTurn && g.diceRolled && g.movesLeft.length > 0;
+    const dice = uniqueVals(g.movesLeft);
+
+    let selectableDestinations = {};
+    if (canAct && selected){
+      dice.forEach(d => {
+        const src = selected.type === "bar" ? "bar" : selected.idx;
+        const dest = legalDestForDie(g, role, src, d);
+        if (dest !== null) selectableDestinations[dest === "off" ? "off" : dest] = d;
+      });
+    }
+    let selectableSources = new Set();
+    if (canAct && !selected){
+      if (g.bar[role] > 0){
+        selectableSources.add("bar");
+      } else {
+        for (let p = 1; p <= 24; p++){
+          const owner = pointOwnerCount(g.board, p);
+          if (owner.owner !== role) continue;
+          for (const d of dice){ if (legalDestForDie(g, role, p, d)){ selectableSources.add(p); break; } }
+        }
+      }
+    }
+
+    const board = el("div", {class:"board"});
+
+    // top row: points 13..18, BAR, points 19..24
+    const topLeft = el("div", {class:"quad"});
+    for (let p = 13; p <= 18; p++) topLeft.appendChild(buildPoint(p, true, g, selectableSources, selectableDestinations));
+    const topRight = el("div", {class:"quad"});
+    for (let p = 19; p <= 24; p++) topRight.appendChild(buildPoint(p, true, g, selectableSources, selectableDestinations));
+
+    const offLeftTop = el("div", {class:"off-col"}, [
+      el("div", {class:"lbl", text:"OFF"}),
+      el("div", {class:"off-count", text:String(g.off.daniel)})
+    ]);
+    const barCol = el("div", {class:"bar", style:"grid-row: span 2;"});
+
+    board.appendChild(offLeftTop);
+    board.appendChild(topLeft);
+    board.appendChild(barCol);
+    board.appendChild(topRight);
+    // second off column placeholder to keep grid rectangular on bottom row
+    const offRightTop = el("div", {class:"off-col"}, [
+      el("div", {class:"lbl", text:"OFF"}),
+      el("div", {class:"off-count", text:String(g.off.lina)})
+    ]);
+    board.appendChild(offRightTop);
+
+    // bottom row: points 12..7, BAR(same col), points 6..1
+    const bottomLeft = el("div", {class:"quad"});
+    for (let p = 12; p >= 7; p--) bottomLeft.appendChild(buildPoint(p, false, g, selectableSources, selectableDestinations));
+    const bottomRight = el("div", {class:"quad"});
+    for (let p = 6; p >= 1; p--) bottomRight.appendChild(buildPoint(p, false, g, selectableSources, selectableDestinations));
+
+    const offLeftBottom = el("div", {class:"off-col"});
+    board.appendChild(offLeftBottom);
+    board.appendChild(bottomLeft);
+    board.appendChild(bottomRight);
+    const offRightBottom = el("div", {class:"off-col"});
+    board.appendChild(offRightBottom);
+
+    // populate bar column with checkers + click zones
+    if (g.bar.daniel > 0){
+      const stack = el("div", {class:"bar-stack"});
+      stack.appendChild(el("div", {class:"bar-label", text:"Daniel"}));
+      for (let i=0;i<g.bar.daniel;i++) stack.appendChild(el("div", {class:"checker daniel"}));
+      if (canAct && role==="daniel" && selectableSources.has("bar")){
+        stack.style.cursor="pointer";
+        stack.classList.add(selected && selected.type==="bar" ? "selected" : "");
+        stack.addEventListener("click", ()=>{ selected = {type:"bar"}; render(); });
+      }
+      barCol.appendChild(stack);
+    }
+    if (g.bar.lina > 0){
+      const stack = el("div", {class:"bar-stack"});
+      stack.appendChild(el("div", {class:"bar-label", text:"Lina"}));
+      for (let i=0;i<g.bar.lina;i++) stack.appendChild(el("div", {class:"checker lina"}));
+      if (canAct && role==="lina" && selectableSources.has("bar")){
+        stack.style.cursor="pointer";
+        stack.addEventListener("click", ()=>{ selected = {type:"bar"}; render(); });
+      }
+      barCol.appendChild(stack);
+    }
+    if (g.bar.daniel === 0 && g.bar.lina === 0){
+      barCol.appendChild(el("div", {class:"bar-label", text:"BAR"}));
+    }
+
+    // handle bear-off click zones
+    if (canAct && selected){
+      if (selectableDestinations.hasOwnProperty("off")){
+        const zone = role === "daniel" ? offLeftBottom : offRightBottom;
+        zone.classList.add("off-col");
+        zone.style.cursor = "pointer";
+        zone.style.boxShadow = "inset 0 0 0 2px var(--accent2)";
+        zone.appendChild(el("div", {text:"⬇", style:"font-size:1.2rem;text-align:center;color:var(--accent2);"}));
+        zone.addEventListener("click", ()=>{
+          const die = selectableDestinations["off"];
+          doMove(selected.type==="bar" ? "bar" : selected.idx, die, "off");
+        });
+      }
+    }
+
+    return board;
+  }
+
+  function buildPoint(p, isTop, g, selectableSources, selectableDestinations){
+    const owner = pointOwnerCount(g.board, p);
+    const shade = (p % 2 === 0) ? "" : " b";
+    const cls = "point" + shade + (isTop ? " top" : " bottom");
+    const div = el("div", {class: cls});
+    div.appendChild(el("div", {class:"idx", text:String(p)}));
+
+    const maxShown = 5;
+    const count = owner.count;
+    for (let i = 0; i < Math.min(count, maxShown); i++){
+      const isLast = i === maxShown - 1 && count > maxShown;
+      div.appendChild(el("div", {class:"checker " + owner.owner, text: isLast ? ("+" + (count - maxShown + 1)) : ""}));
+    }
+
+    const g_turn = g.turn === role;
+    const canAct = g_turn && g.diceRolled && g.movesLeft.length > 0;
+
+    if (canAct && !selected && selectableSources.has(p)){
+      div.classList.add("selectable");
+      div.addEventListener("click", ()=>{ selected = {type:"point", idx:p}; render(); });
+    } else if (canAct && selected){
+      if (selected.type === "point" && selected.idx === p){
+        div.classList.add("selected");
+        div.addEventListener("click", ()=>{ selected = null; render(); });
+      } else if (selectableDestinations.hasOwnProperty(p)){
+        div.classList.add("selectable");
+        div.addEventListener("click", ()=>{
+          const die = selectableDestinations[p];
+          doMove(selected.type==="bar" ? "bar" : selected.idx, die, p);
+        });
+      }
+    }
+    return div;
+  }
+
+  function renderFooter(){
+    app.appendChild(el("div", {class:"footer-note", text:"Playing as " + PLAYERS[role] + " · "}, [
+      el("button", {class:"btn ghost", text:"switch player", onclick: ()=>{ role=null; localStorage.removeItem(ROLE_KEY); render(); }})
+    ]));
+  }
+
+  // ---------- Actions ----------
+
+  function cloneState(s){ return JSON.parse(JSON.stringify(s)); }
+
+  async function rollDice(){
+    const s = cloneState(state);
+    const g = s.game;
+    if (g.turn !== role || g.diceRolled) return;
+    const d1 = 1 + Math.floor(Math.random()*6);
+    const d2 = 1 + Math.floor(Math.random()*6);
+    g.dice = [d1, d2];
+    g.movesLeft = d1 === d2 ? [d1,d1,d1,d1] : [d1,d2];
+    g.diceRolled = true;
+    selected = null;
+    await saveGame(s, g);
+  }
+
+  async function doMove(source, die, dest){
+    const s = cloneState(state);
+    const g = s.game;
+    if (g.turn !== role) return;
+    applyMove(g, role, source, die, dest);
+    selected = null;
+    await saveGame(s, g);
+  }
+
+  async function endTurn(){
+    const s = cloneState(state);
+    const g = s.game;
+    if (g.turn !== role) return;
+    g.turn = OPP[g.turn];
+    g.dice = [];
+    g.movesLeft = [];
+    g.diceRolled = false;
+    selected = null;
+    await saveGame(s, g);
+  }
+
+  async function saveGame(s, g){
+    const patch = { game: g, updatedAt: Date.now() };
+    if (g.gameOver){
+      const winner = g.gameWinner;
+      const newScores = Object.assign({}, s.scores);
+      newScores[winner] = (newScores[winner]||0) + 1;
+      patch.scores = newScores;
+      const target = Math.ceil(s.meta.bestOf / 2);
+      if (newScores[winner] >= target){
+        patch.matchOver = true;
+        patch.matchWinner = winner;
+      }
+    }
+    try {
+      await db.doc(DOC_PATH).update(patch);
+    } catch(e){ /* ignore transient write errors; snapshot will resync */ }
+  }
+
+  async function startNextGame(){
+    const s = cloneState(state);
+    const g = s.game;
+    const nextStarter = g.gameWinner ? OPP[g.gameWinner] : (Math.random()<0.5?"daniel":"lina");
+    try {
+      await db.doc(DOC_PATH).update({ game: newGameState(nextStarter), updatedAt: Date.now() });
+    } catch(e){}
+  }
+
+  function openSettings(){
+    const overlay = el("div", {class:"settings-pop", onclick:(e)=>{ if(e.target===overlay) overlay.remove(); }});
+    const card = el("div", {class:"settings-card"});
+    card.appendChild(el("h2", {text:"Match settings", style:"margin-top:0;"}));
+
+    const challengeInput = el("input", {type:"text", value: state.meta.challenge});
+    const bestOfInput = el("input", {type:"number", value: String(state.meta.bestOf), min:"1", step:"2"});
+
+    card.appendChild(el("label", {text:"This week's challenge / stakes"}));
+    card.appendChild(challengeInput);
+    card.appendChild(el("label", {text:"Best of (games)"}));
+    card.appendChild(bestOfInput);
+
+    card.appendChild(el("div", {class:"controls-row"}, [
+      el("button", {class:"btn secondary", text:"Save", onclick: async ()=>{
+        let bestOf = parseInt(bestOfInput.value,10);
+        if (!bestOf || bestOf < 1) bestOf = state.meta.bestOf;
+        try {
+          await db.doc(DOC_PATH).update({ "meta": { challenge: challengeInput.value.trim() || state.meta.challenge, bestOf } });
+        } catch(e){}
+        overlay.remove();
+      }})
+    ]));
+
+    card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
+    card.appendChild(el("p", {text:"Starting a new match resets the score to 0–0 and lets you set a new challenge.", style:"font-size:0.8rem;color:var(--muted);"}));
+    card.appendChild(el("div", {class:"controls-row"}, [
+      el("button", {class:"btn", text:"Start new match", onclick: async ()=>{
+        if (!confirm("Reset the score and start a brand new match?")) return;
+        const fresh = defaultMatchState();
+        fresh.meta.challenge = challengeInput.value.trim() || "This week's match";
+        fresh.meta.bestOf = parseInt(bestOfInput.value,10) || 11;
+        try { await db.doc(DOC_PATH).set(fresh); } catch(e){}
+        overlay.remove();
+      }})
+    ]));
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  // ---------- Boot ----------
+
+  async function boot(){
+    if (SUPABASE_URL.indexOf("YOUR_SUPABASE") === 0 || SUPABASE_ANON_KEY.indexOf("YOUR_SUPABASE") === 0 || typeof window.supabase === "undefined"){
+      dbAvailable = false;
+      localError = "Supabase isn't configured yet.";
+      render();
+      return;
+    }
+
+    let client = null;
+    try {
+      client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch(e){ client = null; }
+
+    if (!client){
+      dbAvailable = false;
+      localError = "Couldn't create the Supabase client.";
+      render();
+      return;
+    }
+    db = makeSupabaseDb(client);
+    dbAvailable = true;
+
+    try {
+      db.doc(DOC_PATH).onSnapshot(
+        (snap)=>{
+          state = snap.exists ? snap.data() : null;
+          render();
+        },
+        (err)=>{
+          localError = (err && err.message) || "Lost connection to the shared match.";
+          render();
+        }
+      );
+    } catch(e){
+      try {
+        const snap = await db.doc(DOC_PATH).get();
+        state = snap.exists ? snap.data() : null;
+      } catch(e2){ state = null; }
+      render();
+    }
+
+    render();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
