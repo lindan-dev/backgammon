@@ -835,7 +835,7 @@
       for (let i=0;i<g.bar.daniel;i++) stack.appendChild(el("div", {class:"checker daniel"}));
       if (canAct && role==="daniel" && selectableSources.has("bar")){
         stack.style.cursor="pointer";
-        stack.classList.add(selected && selected.type==="bar" ? "selected" : "");
+        if (selected && selected.type === "bar") stack.classList.add("selected");
         stack.addEventListener("click", ()=>{ selected = {type:"bar"}; render(); });
       }
       barCol.appendChild(stack);
@@ -846,6 +846,7 @@
       for (let i=0;i<g.bar.lina;i++) stack.appendChild(el("div", {class:"checker lina"}));
       if (canAct && role==="lina" && selectableSources.has("bar")){
         stack.style.cursor="pointer";
+        if (selected && selected.type === "bar") stack.classList.add("selected");
         stack.addEventListener("click", ()=>{ selected = {type:"bar"}; render(); });
       }
       barCol.appendChild(stack);
