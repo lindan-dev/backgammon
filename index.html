@@ -965,7 +965,7 @@
     if (g.turn !== role || g.diceRolled) return;
     const d1 = 1 + Math.floor(Math.random()*6);
     const d2 = 1 + Math.floor(Math.random()*6);
-    g.dice = [d1, d2];
+    g.dice = d1 === d2 ? [d1,d1,d1,d1] : [d1,d2];
     g.movesLeft = d1 === d2 ? [d1,d1,d1,d1] : [d1,d2];
     g.diceRolled = true;
     selected = null;
