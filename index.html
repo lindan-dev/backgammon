@@ -76,6 +76,7 @@
     gap: 8px; flex-wrap:wrap;
     margin-bottom: 10px;
   }
+  .header-actions{ display:flex; gap:8px; align-items:center; }
   h1{
     font-size: 1.15rem;
     margin: 0;
@@ -739,9 +740,14 @@
     const winTarget = Math.ceil(bestOf / 2);
 
     // Header
+    const headerButtons = [];
+    if (!state.matchOver && !g.gameOver){
+      headerButtons.push(el("button", {class:"pill", text:"🏳️ Forfeit", onclick: forfeitGame}));
+    }
+    headerButtons.push(el("button", {class:"pill", text:"⚙️ Settings", onclick: openSettings}));
     const header = el("header", {}, [
       el("h1", {text:"🎲 Backgammon"}),
-      el("button", {class:"pill", text:"⚙️ Settings", onclick: openSettings})
+      el("div", {class:"header-actions"}, headerButtons)
     ]);
     app.appendChild(header);
 
@@ -1075,6 +1081,21 @@
     await saveGame(s, g);
   }
 
+  async function forfeitGame(){
+    if (state.matchOver || state.game.gameOver) return;
+    if (!confirm("Forfeit this game? " + PLAYERS[OPP[role]] + " will be awarded the win.")) return;
+    const s = cloneState(state);
+    const g = s.game;
+    g.gameOver = true;
+    g.gameWinner = OPP[role];
+    g.dice = [];
+    g.movesLeft = [];
+    g.diceRolled = false;
+    g.moveHistory = [];
+    selected = null;
+    await saveGame(s, g);
+  }
+
   async function saveGame(s, g){
     const patch = { game: g, updatedAt: Date.now() };
     if (g.gameOver){
@@ -1125,27 +1146,6 @@
         overlay.remove();
       }})
     ]));
-
-    if (!state.matchOver && state.game && !state.game.gameOver){
-      card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
-      card.appendChild(el("p", {text:"Give up this game — " + PLAYERS[OPP[role]] + " will be awarded the win, but the match continues.", style:"font-size:0.8rem;color:var(--muted);"}));
-      card.appendChild(el("div", {class:"controls-row"}, [
-        el("button", {class:"btn secondary", text:"Forfeit this game", onclick: async ()=>{
-          if (!confirm("Forfeit this game? " + PLAYERS[OPP[role]] + " will be awarded the win.")) return;
-          const s = cloneState(state);
-          const g = s.game;
-          g.gameOver = true;
-          g.gameWinner = OPP[role];
-          g.dice = [];
-          g.movesLeft = [];
-          g.diceRolled = false;
-          g.moveHistory = [];
-          selected = null;
-          await saveGame(s, g);
-          overlay.remove();
-        }})
-      ]));
-    }
 
     card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
     card.appendChild(el("p", {text:"Starting a new match resets the score to 0–0 and lets you set a new challenge.", style:"font-size:0.8rem;color:var(--muted);"}));
