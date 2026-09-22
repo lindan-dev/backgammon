@@ -197,6 +197,7 @@
     gap: 5px; max-width: 78px;
   }
   .board-dice-overlay .die{ width: 32px; height:32px; font-size:0.95rem; }
+  .chip-btn-row{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .board{
     display:grid;
     grid-template-columns: 0.55fr repeat(6, 1fr) 0.55fr repeat(6, 1fr) 0.55fr;
@@ -449,6 +450,7 @@
       diceRolled: false,
       gameOver: false,
       gameWinner: null,
+      moveHistory: [],
       message: ""
     };
   }
@@ -582,6 +584,7 @@
 
   function applyMove(g, player, source, die, dest){
     const board = g.board;
+    const record = { player, source, die, dest, hit: null };
     if (source === "bar"){ g.bar[player] -= 1; }
     else { board[source] -= player === "daniel" ? 1 : -1; }
 
@@ -592,6 +595,7 @@
       if (occ.owner === OPP[player] && occ.count === 1){
         board[dest] = 0;
         g.bar[OPP[player]] += 1;
+        record.hit = OPP[player];
       }
       board[dest] += player === "daniel" ? 1 : -1;
     }
@@ -603,6 +607,30 @@
       g.gameOver = true;
       g.gameWinner = player;
     }
+    return record;
+  }
+
+  // Reverses one record produced by applyMove, in place on g.
+  function reverseMove(g, record){
+    const { player, source, die, dest, hit } = record;
+    const board = g.board;
+    if (dest === "off"){
+      g.off[player] -= 1;
+      if (g.gameOver && g.gameWinner === player && g.off[player] < 15){
+        g.gameOver = false;
+        g.gameWinner = null;
+      }
+    } else {
+      board[dest] -= player === "daniel" ? 1 : -1;
+      if (hit){
+        g.bar[hit] -= 1;
+        board[dest] += hit === "daniel" ? 1 : -1;
+      }
+    }
+    if (source === "bar"){ g.bar[player] += 1; }
+    else { board[source] += player === "daniel" ? 1 : -1; }
+
+    g.movesLeft.push(die);
   }
 
   // ---------- Rendering ----------
@@ -779,8 +807,15 @@
     }
     if (myTurn && !g.diceRolled){
       diceOverlay.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollDice}));
-    } else if (myTurn && g.diceRolled && (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn))){
-      diceOverlay.appendChild(el("button", {class:"btn small secondary", text:"End turn", onclick: endTurn}));
+    } else if (myTurn && g.diceRolled){
+      const btnRow = el("div", {class:"chip-btn-row"});
+      if (g.moveHistory && g.moveHistory.length > 0){
+        btnRow.appendChild(el("button", {class:"btn small secondary", text:"Undo", onclick: undoLastMove}));
+      }
+      if (g.movesLeft.length === 0 || !anyLegalMove(g, g.turn)){
+        btnRow.appendChild(el("button", {class:"btn small", text:"End turn", onclick: endTurn}));
+      }
+      if (btnRow.children.length > 0) diceOverlay.appendChild(btnRow);
     }
     if (diceOverlay.children.length > 0) boardCard.appendChild(diceOverlay);
 
@@ -1000,12 +1035,28 @@
     const s = cloneState(state);
     const g = s.game;
     if (g.turn !== role) return;
+    if (!g.moveHistory) g.moveHistory = [];
+    const records = [];
     if (dieOrCombo && typeof dieOrCombo === "object" && dieOrCombo.combo){
       const { dieA, dieB, mid } = dieOrCombo.combo;
-      applyMove(g, role, source, dieA, mid);
-      applyMove(g, role, mid, dieB, dest);
+      records.push(applyMove(g, role, source, dieA, mid));
+      records.push(applyMove(g, role, mid, dieB, dest));
     } else {
-      applyMove(g, role, source, dieOrCombo, dest);
+      records.push(applyMove(g, role, source, dieOrCombo, dest));
+    }
+    g.moveHistory.push(records);
+    selected = null;
+    await saveGame(s, g);
+  }
+
+  async function undoLastMove(){
+    const s = cloneState(state);
+    const g = s.game;
+    if (g.turn !== role) return;
+    if (!g.moveHistory || g.moveHistory.length === 0) return;
+    const group = g.moveHistory.pop();
+    for (let i = group.length - 1; i >= 0; i--){
+      reverseMove(g, group[i]);
     }
     selected = null;
     await saveGame(s, g);
@@ -1019,6 +1070,7 @@
     g.dice = [];
     g.movesLeft = [];
     g.diceRolled = false;
+    g.moveHistory = [];
     selected = null;
     await saveGame(s, g);
   }
