@@ -1126,6 +1126,27 @@
       }})
     ]));
 
+    if (!state.matchOver && state.game && !state.game.gameOver){
+      card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
+      card.appendChild(el("p", {text:"Give up this game — " + PLAYERS[OPP[role]] + " will be awarded the win, but the match continues.", style:"font-size:0.8rem;color:var(--muted);"}));
+      card.appendChild(el("div", {class:"controls-row"}, [
+        el("button", {class:"btn secondary", text:"Forfeit this game", onclick: async ()=>{
+          if (!confirm("Forfeit this game? " + PLAYERS[OPP[role]] + " will be awarded the win.")) return;
+          const s = cloneState(state);
+          const g = s.game;
+          g.gameOver = true;
+          g.gameWinner = OPP[role];
+          g.dice = [];
+          g.movesLeft = [];
+          g.diceRolled = false;
+          g.moveHistory = [];
+          selected = null;
+          await saveGame(s, g);
+          overlay.remove();
+        }})
+      ]));
+    }
+
     card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
     card.appendChild(el("p", {text:"Starting a new match resets the score to 0–0 and lets you set a new challenge.", style:"font-size:0.8rem;color:var(--muted);"}));
     card.appendChild(el("div", {class:"controls-row"}, [
