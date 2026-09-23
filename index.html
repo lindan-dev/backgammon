@@ -199,6 +199,7 @@
   }
   .board-dice-overlay .die{ width: 32px; height:32px; font-size:0.95rem; }
   .chip-btn-row{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  .opening-roll-line{ text-align:center; font-size:0.78rem; color:var(--muted); margin: 6px 0 0; }
   .board{
     display:grid;
     grid-template-columns: 0.55fr repeat(6, 1fr) 0.55fr repeat(6, 1fr) 0.55fr;
@@ -440,18 +441,32 @@
     return board;
   }
 
-  function newGameState(startingTurn){
+  // Classic opening procedure: each player rolls one die; higher goes
+  // first and plays both dice as their opening move. Reroll on a tie.
+  function rollOpeningDice(){
+    let danielDie, linaDie;
+    do {
+      danielDie = 1 + Math.floor(Math.random() * 6);
+      linaDie = 1 + Math.floor(Math.random() * 6);
+    } while (danielDie === linaDie);
+    return { danielDie, linaDie };
+  }
+
+  function newGameState(){
+    const { danielDie, linaDie } = rollOpeningDice();
+    const starter = danielDie > linaDie ? "daniel" : "lina";
     return {
       board: freshBoard(),
       bar: { daniel: 0, lina: 0 },
       off: { daniel: 0, lina: 0 },
-      turn: startingTurn,
-      dice: [],
-      movesLeft: [],
-      diceRolled: false,
+      turn: starter,
+      dice: [danielDie, linaDie],
+      movesLeft: [danielDie, linaDie],
+      diceRolled: true,
       gameOver: false,
       gameWinner: null,
       moveHistory: [],
+      openingRoll: { daniel: danielDie, lina: linaDie },
       message: ""
     };
   }
@@ -460,7 +475,7 @@
     return {
       meta: { challenge: "Sunday dinner", bestOf: 11 },
       scores: { daniel: 0, lina: 0 },
-      game: newGameState(Math.random() < 0.5 ? "daniel" : "lina"),
+      game: newGameState(),
       matchOver: false,
       matchWinner: null,
       updatedAt: Date.now()
@@ -880,6 +895,14 @@
     scrollWrap.appendChild(boardCard);
     app.appendChild(scrollWrap);
 
+    // Opening roll announcement (only until the first move of the game is made)
+    if (g.openingRoll && (!g.moveHistory || g.moveHistory.length === 0)){
+      const o = g.openingRoll;
+      app.appendChild(el("div", {class:"opening-roll-line", text:
+        "Opening roll — Daniel " + o.daniel + ", Lina " + o.lina + ": " + (o.daniel > o.lina ? "Daniel" : "Lina") + " starts."
+      }));
+    }
+
     // Status line
     let statusText = "";
     let attn = false;
@@ -1177,11 +1200,8 @@
   }
 
   async function startNextGame(){
-    const s = cloneState(state);
-    const g = s.game;
-    const nextStarter = g.gameWinner ? OPP[g.gameWinner] : (Math.random()<0.5?"daniel":"lina");
     try {
-      await db.doc(DOC_PATH).update({ game: newGameState(nextStarter), updatedAt: Date.now() });
+      await db.doc(DOC_PATH).update({ game: newGameState(), updatedAt: Date.now() });
     } catch(e){}
   }
 
