@@ -1205,6 +1205,13 @@
     } catch(e){}
   }
 
+  async function restartGame(){
+    if (state.matchOver) return;
+    try {
+      await db.doc(DOC_PATH).update({ game: newGameState(), updatedAt: Date.now() });
+    } catch(e){}
+  }
+
   function openSettings(){
     const overlay = el("div", {class:"settings-pop", onclick:(e)=>{ if(e.target===overlay) overlay.remove(); }});
     const card = el("div", {class:"settings-card"});
@@ -1228,6 +1235,18 @@
         overlay.remove();
       }})
     ]));
+
+    if (!state.matchOver){
+      card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
+      card.appendChild(el("p", {text:"Restart just the current game from a fresh opening roll. The score and challenge stay as they are.", style:"font-size:0.8rem;color:var(--muted);"}));
+      card.appendChild(el("div", {class:"controls-row"}, [
+        el("button", {class:"btn secondary", text:"Restart this game", onclick: async ()=>{
+          if (!confirm("Restart this game from the beginning? Current progress will be lost — the score stays as is.")) return;
+          await restartGame();
+          overlay.remove();
+        }})
+      ]));
+    }
 
     card.appendChild(el("hr", {style:"margin:16px 0;border-color:var(--wood-light);opacity:.4;"}));
     card.appendChild(el("p", {text:"Starting a new match resets the score to 0–0 and lets you set a new challenge.", style:"font-size:0.8rem;color:var(--muted);"}));
