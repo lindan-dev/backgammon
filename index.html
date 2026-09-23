@@ -543,6 +543,16 @@
     return destFromPoint(g, player, p, die);
   }
 
+  // True when player has a checker on the bar and every one of the 6
+  // possible entry points is blocked — no die roll could ever let them in.
+  function isClosedOut(g, player){
+    if (g.bar[player] <= 0) return false;
+    for (let d = 1; d <= 6; d++){
+      if (legalDestForDie(g, player, "bar", d) !== null) return false;
+    }
+    return true;
+  }
+
   function anyLegalMove(g, player){
     const dice = uniqueVals(g.movesLeft);
     if (g.bar[player] > 0){
@@ -561,25 +571,35 @@
   function uniqueVals(arr){ return Array.from(new Set(arr)); }
 
   // For a checker at a normal board point (not the bar), find destinations
-  // reachable by using two of the remaining dice together as one move —
-  // only offered when that spot isn't already reachable with a single die.
+  // reachable by chaining two or more of the remaining dice together as one
+  // move (e.g. all 4 of a double) — only offered when a spot isn't already
+  // reachable with fewer dice, since each extra die lands on a distinct
+  // farther point (movement is always one direction, so no collisions).
   function combinedDestsForSource(g, player, source){
-    const counts = {};
-    g.movesLeft.forEach(d => { counts[d] = (counts[d]||0) + 1; });
-    const values = Object.keys(counts).map(Number);
-    const results = {}; // key (point number or "off") -> {dieA, dieB, mid}
-    for (const dieA of values){
-      const mid = legalDestForDie(g, player, source, dieA);
-      if (mid === null || mid === "off") continue; // no valid first leg
-      for (const dieB of values){
-        const needed = (dieB === dieA) ? 2 : 1;
-        if (counts[dieB] < needed) continue;
-        const finalDest = destFromPoint(g, player, mid, dieB);
-        if (finalDest === null) continue;
-        const key = finalDest === "off" ? "off" : finalDest;
-        if (!(key in results)) results[key] = { dieA, dieB, mid };
+    const initialCounts = {};
+    g.movesLeft.forEach(d => { initialCounts[d] = (initialCounts[d]||0) + 1; });
+    const results = {}; // key (point number or "off") -> { legs: [die, die, ...] }
+
+    function recurse(currentPoint, counts, legsSoFar){
+      const values = Object.keys(counts).map(Number);
+      for (const die of values){
+        if (counts[die] <= 0) continue;
+        const dest = destFromPoint(g, player, currentPoint, die);
+        if (dest === null) continue;
+        const legs = legsSoFar.concat([die]);
+        if (legs.length >= 2){
+          const key = dest === "off" ? "off" : dest;
+          if (!(key in results)) results[key] = { legs };
+        }
+        if (dest !== "off"){
+          const nextCounts = Object.assign({}, counts);
+          nextCounts[die] -= 1;
+          recurse(dest, nextCounts, legs);
+        }
       }
     }
+
+    recurse(source, initialCounts, []);
     return results;
   }
 
@@ -684,6 +704,34 @@
     }
 
     renderGame();
+    maybeAutoSkipClosedOut();
+  }
+
+  // If it's my turn, I have a checker on the bar, and the opponent's home
+  // board is fully closed (no die could ever let me in), there's no point
+  // making me roll — just pass the turn straight to them.
+  let autoSkipInFlight = false;
+  async function maybeAutoSkipClosedOut(){
+    if (autoSkipInFlight) return;
+    if (!state || !state.game) return;
+    const g = state.game;
+    if (state.matchOver || g.gameOver) return;
+    if (g.turn !== role) return;
+    if (g.diceRolled) return;
+    if (!isClosedOut(g, role)) return;
+    autoSkipInFlight = true;
+    try {
+      const s = cloneState(state);
+      const gg = s.game;
+      gg.turn = OPP[gg.turn];
+      gg.dice = [];
+      gg.movesLeft = [];
+      gg.diceRolled = false;
+      gg.moveHistory = [];
+      await saveGame(s, gg);
+    } finally {
+      autoSkipInFlight = false;
+    }
   }
 
   function renderRoleChoice(){
@@ -812,7 +860,11 @@
       diceOverlay.appendChild(diceRow);
     }
     if (myTurn && !g.diceRolled){
-      diceOverlay.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollDice}));
+      if (isClosedOut(g, role)){
+        diceOverlay.appendChild(el("div", {class:"side-hint", text:"Closed out — skipping…"}));
+      } else {
+        diceOverlay.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollDice}));
+      }
     } else if (myTurn && g.diceRolled){
       const btnRow = el("div", {class:"chip-btn-row"});
       if (g.moveHistory && g.moveHistory.length > 0){
@@ -832,7 +884,11 @@
     let statusText = "";
     let attn = false;
     if (!g.diceRolled){
-      statusText = myTurn ? "Your roll." : (PLAYERS[g.turn] + " is rolling…");
+      if (g.bar[g.turn] > 0 && isClosedOut(g, g.turn)){
+        statusText = myTurn ? "You're closed out — passing to " + PLAYERS[OPP[g.turn]] + "." : (PLAYERS[g.turn] + " is closed out — skipping their turn…");
+      } else {
+        statusText = myTurn ? "Your roll." : (PLAYERS[g.turn] + " is rolling…");
+      }
     } else if (g.movesLeft.length === 0){
       statusText = myTurn ? "No moves left — end your turn." : (PLAYERS[g.turn] + " is finishing up…");
     } else if (!anyLegalMove(g, g.turn)){
@@ -1044,9 +1100,15 @@
     if (!g.moveHistory) g.moveHistory = [];
     const records = [];
     if (dieOrCombo && typeof dieOrCombo === "object" && dieOrCombo.combo){
-      const { dieA, dieB, mid } = dieOrCombo.combo;
-      records.push(applyMove(g, role, source, dieA, mid));
-      records.push(applyMove(g, role, mid, dieB, dest));
+      const legs = dieOrCombo.combo.legs;
+      let current = source;
+      for (let i = 0; i < legs.length; i++){
+        const die = legs[i];
+        const isLast = i === legs.length - 1;
+        const legDest = isLast ? dest : destFromPoint(g, role, current, die);
+        records.push(applyMove(g, role, current, die, legDest));
+        current = legDest;
+      }
     } else {
       records.push(applyMove(g, role, source, dieOrCombo, dest));
     }
