@@ -200,6 +200,11 @@
   .board-dice-overlay .die{ width: 32px; height:32px; font-size:0.95rem; }
   .chip-btn-row{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .opening-roll-line{ text-align:center; font-size:0.78rem; color:var(--muted); margin: 6px 0 0; }
+  .opening-title{ font-weight:700; font-size:0.8rem; text-align:center; }
+  .opening-row{ display:flex; gap:16px; justify-content:center; }
+  .opening-side{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .die.black{ background:#161616; color:#ffffff; border-color: var(--line); }
+  .die.placeholder{ opacity:.35; }
   .board{
     display:grid;
     grid-template-columns: 0.55fr repeat(6, 1fr) 0.55fr repeat(6, 1fr) 0.55fr;
@@ -441,32 +446,22 @@
     return board;
   }
 
-  // Classic opening procedure: each player rolls one die; higher goes
-  // first and plays both dice as their opening move. Reroll on a tie.
-  function rollOpeningDice(){
-    let danielDie, linaDie;
-    do {
-      danielDie = 1 + Math.floor(Math.random() * 6);
-      linaDie = 1 + Math.floor(Math.random() * 6);
-    } while (danielDie === linaDie);
-    return { danielDie, linaDie };
-  }
-
+  // Classic opening procedure: each player rolls their own single die
+  // (interactively, one Roll button each); higher goes first and plays
+  // both dice as their opening move. Tied rolls are cleared for a reroll.
   function newGameState(){
-    const { danielDie, linaDie } = rollOpeningDice();
-    const starter = danielDie > linaDie ? "daniel" : "lina";
     return {
       board: freshBoard(),
       bar: { daniel: 0, lina: 0 },
       off: { daniel: 0, lina: 0 },
-      turn: starter,
-      dice: [danielDie, linaDie],
-      movesLeft: [danielDie, linaDie],
-      diceRolled: true,
+      turn: null, // not yet decided — opening roll still in progress
+      dice: [],
+      movesLeft: [],
+      diceRolled: false,
       gameOver: false,
       gameWinner: null,
       moveHistory: [],
-      openingRoll: { daniel: danielDie, lina: linaDie },
+      opening: { daniel: null, lina: null },
       message: ""
     };
   }
@@ -720,6 +715,7 @@
 
     renderGame();
     maybeAutoSkipClosedOut();
+    maybeResolveTie();
   }
 
   // If it's my turn, I have a checker on the bar, and the opponent's home
@@ -747,6 +743,30 @@
     } finally {
       autoSkipInFlight = false;
     }
+  }
+
+  // If both players' opening-roll dice are in and tied, clear them after a
+  // short pause so the tie is visible for a moment before both can reroll.
+  let tieResetScheduled = false;
+  function maybeResolveTie(){
+    if (!state || !state.game) return;
+    const g = state.game;
+    if (g.turn !== null) return;
+    if (!g.opening || g.opening.daniel === null || g.opening.lina === null) return;
+    if (g.opening.daniel !== g.opening.lina) return;
+    if (tieResetScheduled) return;
+    tieResetScheduled = true;
+    setTimeout(async () => {
+      tieResetScheduled = false;
+      if (!state || !state.game) return;
+      const g2 = state.game;
+      if (g2.turn !== null) return;
+      if (!g2.opening || g2.opening.daniel === null || g2.opening.lina === null) return;
+      if (g2.opening.daniel !== g2.opening.lina) return;
+      const s = cloneState(state);
+      s.game.opening = { daniel: null, lina: null };
+      await saveGame(s, s.game);
+    }, 1200);
   }
 
   function renderRoleChoice(){
@@ -863,9 +883,34 @@
     const boardCard = el("div", {class:"board-outer"});
     boardCard.appendChild(buildBoardEl(g));
 
-    // Dice + roll/end-turn, shown as a floating chip on the board itself (at the bar)
     const myTurn = g.turn === role;
     const diceOverlay = el("div", {class:"board-dice-overlay"});
+
+    if (g.turn === null){
+      // Opening roll phase: one die each, shown side by side on the bar.
+      diceOverlay.appendChild(el("div", {class:"opening-title", text:"Opening roll"}));
+      const openingRow = el("div", {class:"opening-row"});
+      openingRow.appendChild(buildOpeningSide(g, "daniel", "black"));
+      openingRow.appendChild(buildOpeningSide(g, "lina", null));
+      diceOverlay.appendChild(openingRow);
+      if (g.opening.daniel !== null && g.opening.lina !== null && g.opening.daniel === g.opening.lina){
+        diceOverlay.appendChild(el("div", {class:"side-hint attn", text:"Tie! Rolling again…"}));
+      }
+      boardCard.appendChild(diceOverlay);
+      scrollWrap.appendChild(boardCard);
+      app.appendChild(scrollWrap);
+
+      app.appendChild(el("div", {class:"status-line", text:
+        role === "daniel"
+          ? (g.opening.daniel === null ? "Roll your die." : "Waiting for Lina to roll…")
+          : (g.opening.lina === null ? "Roll your die." : "Waiting for Daniel to roll…")
+      }));
+      app.appendChild(scoreCard);
+      renderFooter();
+      return;
+    }
+
+    // Dice + roll/end-turn, shown as a floating chip on the board itself (at the bar)
     if (g.diceRolled){
       const diceRow = el("div", {class:"dice-row"});
       g.dice.forEach((d, i) => {
@@ -896,8 +941,8 @@
     app.appendChild(scrollWrap);
 
     // Opening roll announcement (only until the first move of the game is made)
-    if (g.openingRoll && (!g.moveHistory || g.moveHistory.length === 0)){
-      const o = g.openingRoll;
+    if (g.opening && (!g.moveHistory || g.moveHistory.length === 0)){
+      const o = g.opening;
       app.appendChild(el("div", {class:"opening-roll-line", text:
         "Opening roll — Daniel " + o.daniel + ", Lina " + o.lina + ": " + (o.daniel > o.lina ? "Daniel" : "Lina") + " starts."
       }));
@@ -927,6 +972,20 @@
 
     app.appendChild(scoreCard);
     renderFooter();
+  }
+
+  // One side (die-or-Roll-button) of the opening-roll display.
+  function buildOpeningSide(g, player, dieModifierClass){
+    const col = el("div", {class:"opening-side"});
+    col.appendChild(el("div", {class:"side-hint", text: player === "daniel" ? "● Daniel" : "○ Lina"}));
+    if (g.opening[player] !== null){
+      col.appendChild(el("div", {class:"die" + (dieModifierClass ? " " + dieModifierClass : ""), text:String(g.opening[player])}));
+    } else if (role === player){
+      col.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollOpeningDie}));
+    } else {
+      col.appendChild(el("div", {class:"die placeholder", text:"?"}));
+    }
+    return col;
   }
 
   function countUsed(g, dieVal, indexInDiceArray){
@@ -1113,6 +1172,23 @@
     g.movesLeft = d1 === d2 ? [d1,d1,d1,d1] : [d1,d2];
     g.diceRolled = true;
     selected = null;
+    await saveGame(s, g);
+  }
+
+  async function rollOpeningDie(){
+    const s = cloneState(state);
+    const g = s.game;
+    if (g.turn !== null) return; // opening already resolved
+    if (!g.opening) g.opening = { daniel: null, lina: null };
+    if (g.opening[role] !== null) return; // already rolled this round
+    g.opening[role] = 1 + Math.floor(Math.random() * 6);
+    if (g.opening.daniel !== null && g.opening.lina !== null && g.opening.daniel !== g.opening.lina){
+      const starter = g.opening.daniel > g.opening.lina ? "daniel" : "lina";
+      g.turn = starter;
+      g.dice = [g.opening.daniel, g.opening.lina];
+      g.movesLeft = [g.opening.daniel, g.opening.lina];
+      g.diceRolled = true;
+    }
     await saveGame(s, g);
   }
 
