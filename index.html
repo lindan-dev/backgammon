@@ -205,6 +205,14 @@
   .opening-side{ display:flex; flex-direction:column; align-items:center; gap:5px; }
   .die.black{ background:#161616; color:#ffffff; border-color: var(--line); }
   .die.placeholder{ opacity:.35; }
+  @keyframes dieRoll{
+    0%   { transform: rotate(0deg) scale(1); }
+    25%  { transform: rotate(-110deg) scale(1.12); }
+    50%  { transform: rotate(140deg) scale(0.92); }
+    75%  { transform: rotate(-40deg) scale(1.08); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+  .die.rolling{ animation: dieRoll 0.45s ease-out; }
   .board{
     display:grid;
     grid-template-columns: 0.55fr repeat(6, 1fr) 0.55fr repeat(6, 1fr) 0.55fr;
@@ -434,6 +442,10 @@
   let state = undefined; // undefined = not loaded yet, null = doc doesn't exist
   let selected = null; // selected source: {type:'point', idx} | {type:'bar'}
   let localError = "";
+  // Tracks which dice we've already played the roll-in animation for, so a
+  // fresh roll animates once but unrelated re-renders (e.g. selecting a
+  // checker) don't replay it.
+  let animState = { normalKey: null, openingDaniel: null, openingLina: null };
 
   const app = document.getElementById("app");
 
@@ -461,6 +473,7 @@
       gameOver: false,
       gameWinner: null,
       moveHistory: [],
+      hasMoved: false,
       opening: { daniel: null, lina: null },
       message: ""
     };
@@ -911,11 +924,17 @@
     }
 
     // Dice + roll/end-turn, shown as a floating chip on the board itself (at the bar)
+    if (!g.diceRolled){
+      animState.normalKey = null; // reset so the next roll always animates
+    }
     if (g.diceRolled){
+      const normalKey = JSON.stringify(g.dice) + "|" + g.turn;
+      const animateNormal = animState.normalKey !== normalKey;
+      animState.normalKey = normalKey;
       const diceRow = el("div", {class:"dice-row"});
       g.dice.forEach((d, i) => {
         const used = countUsed(g, d, i);
-        diceRow.appendChild(el("div", {class:"die" + (used ? " used" : ""), text:String(d)}));
+        diceRow.appendChild(el("div", {class:"die" + (used ? " used" : "") + (animateNormal ? " rolling" : ""), text:String(d)}));
       });
       diceOverlay.appendChild(diceRow);
     }
@@ -941,7 +960,7 @@
     app.appendChild(scrollWrap);
 
     // Opening roll announcement (only until the first move of the game is made)
-    if (g.opening && (!g.moveHistory || g.moveHistory.length === 0)){
+    if (g.opening && !g.hasMoved){
       const o = g.opening;
       app.appendChild(el("div", {class:"opening-roll-line", text:
         "Opening roll — Daniel " + o.daniel + ", Lina " + o.lina + ": " + (o.daniel > o.lina ? "Daniel" : "Lina") + " starts."
@@ -978,11 +997,16 @@
   function buildOpeningSide(g, player, dieModifierClass){
     const col = el("div", {class:"opening-side"});
     col.appendChild(el("div", {class:"side-hint", text: player === "daniel" ? "● Daniel" : "○ Lina"}));
+    const stateKey = player === "daniel" ? "openingDaniel" : "openingLina";
     if (g.opening[player] !== null){
-      col.appendChild(el("div", {class:"die" + (dieModifierClass ? " " + dieModifierClass : ""), text:String(g.opening[player])}));
+      const animate = animState[stateKey] !== String(g.opening[player]);
+      animState[stateKey] = String(g.opening[player]);
+      col.appendChild(el("div", {class:"die" + (dieModifierClass ? " " + dieModifierClass : "") + (animate ? " rolling" : ""), text:String(g.opening[player])}));
     } else if (role === player){
+      animState[stateKey] = null; // reset so the next roll always animates
       col.appendChild(el("button", {class:"btn small", text:"Roll", onclick: rollOpeningDie}));
     } else {
+      animState[stateKey] = null;
       col.appendChild(el("div", {class:"die placeholder", text:"?"}));
     }
     return col;
@@ -1197,6 +1221,7 @@
     const g = s.game;
     if (g.turn !== role) return;
     if (!g.moveHistory) g.moveHistory = [];
+    g.hasMoved = true;
     const records = [];
     if (dieOrCombo && typeof dieOrCombo === "object" && dieOrCombo.combo){
       const legs = dieOrCombo.combo.legs;
