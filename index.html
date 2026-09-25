@@ -931,10 +931,11 @@
       const normalKey = JSON.stringify(g.dice) + "|" + g.turn;
       const animateNormal = animState.normalKey !== normalKey;
       animState.normalKey = normalKey;
+      const turnDieClass = g.turn === "daniel" ? " black" : "";
       const diceRow = el("div", {class:"dice-row"});
       g.dice.forEach((d, i) => {
         const used = countUsed(g, d, i);
-        diceRow.appendChild(el("div", {class:"die" + (used ? " used" : "") + (animateNormal ? " rolling" : ""), text:String(d)}));
+        diceRow.appendChild(el("div", {class:"die" + turnDieClass + (used ? " used" : "") + (animateNormal ? " rolling" : ""), text:String(d)}));
       });
       diceOverlay.appendChild(diceRow);
     }
